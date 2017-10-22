@@ -11,6 +11,7 @@
 
 namespace xt
 {
+#pragma region definion
 	template<typename TIterator>
 	using iterator_type = decltype(**(TIterator*)nullptr);
 
@@ -25,6 +26,119 @@ namespace xt
 		linq_exception(const std::string& m) :message(m)
 		{}
 	};
+
+
+	template<typename T>
+	class hide_type_iterator
+	{
+	private:
+		class iterator_interface
+		{
+			typedef iterator_interface TSelf;
+		public:
+			virtual std::shared_ptr<TSelf> next() = 0;
+			virtual T deref() = 0;
+			virtual bool equals(const std::shared_ptr<TSelf>& p) = 0;
+		};
+
+		template<typename TIterator>
+		class iterator_implement : public iterator_interface
+		{
+			typedef iterator_implement<TIterator> TSelf;
+		private:
+			TIterator iterator;
+
+		public:
+			iterator_implement(const TIterator& it) :iterator(it) {}
+
+			std::shared_ptr<iterator_interface> next()override
+			{
+				TIterator t = iterator;
+				++t;
+				return std::make_shared<TSelf>(t);
+			}
+
+			T deref()override
+			{
+				return *iterator;
+			}
+
+			bool equals(const std::shared_ptr<iterator_interface>& p)override
+			{
+				auto impl = std::dynamic_pointer_cast<TSelf>(p);
+				return impl && (iterator == impl->iterator);
+			}
+		};
+
+		typedef hide_type_iterator<T> TSelf;
+
+		std::shared_ptr<iterator_interface> iterator;
+
+	public:
+		template<typename TIterator>
+		hide_type_iterator(const TIterator& it) :iterator(std::make_shared<iterator_implement<TIterator>>(it)) {}
+
+		TSelf& operator++()
+		{
+			iterator = iterator->next();
+			return *this;
+		}
+
+		T operator*()const
+		{
+			return iterator->deref();
+		}
+
+		bool operator==(const TSelf& it)const
+		{
+			return iterator->equals(it.iterator);
+		}
+
+		bool operator!=(const TSelf& it)const
+		{
+			return !(iterator->equals(it.iterator));
+		}
+	};
+
+	template<typename T>
+	class storage_iterator
+	{
+		typedef storage_iterator<T> TSelf;
+
+	private:
+		std::shared_ptr<std::vector<T>> values;
+		typename std::vector<T>::iterator iterator;
+
+	public:
+		storage_iterator(const std::shared_ptr<std::vector<T>>& v, const typename std::vector<T>::iterator& it) :
+			values(v), iterator(it)
+		{}
+
+		TSelf& operator++()
+		{
+			++iterator;
+			return *this;
+		}
+
+		T operator*()const
+		{
+			return *iterator;
+		}
+
+		bool operator==(const TSelf& it)const
+		{
+			return iterator == it.iterator;
+		}
+
+		bool operator!=(const TSelf& it)const
+		{
+			return iterator != it.iterator;
+		}
+	};
+
+
+
+#pragma endregion
 
 
 #pragma region Select&&Where
@@ -604,14 +718,120 @@ namespace xt
 		}
 #pragma endregion 
 
+#pragma region *By
+
+		template<typename TFunction>
+		auto group_by(const TFunction& keySelector)const
+			->linq<std::pair<decltype(keySelector(*(TElement*)nullptr)), linq<TElement>>>
+		{
+			typedef decltype(keySelector(*(TElement*)nullptr)) TKey;
+			typedef std::vector<TElement> TValueVector;
+			typedef std::shared_ptr<TValueVector> TValueVectorPtr;
+
+			std::map<TKey, TValueVectorPtr> map;
+			for (auto it = _begin; it != _end; ++it)
+			{
+				auto value = *it;
+				auto key = keySelector(value);
+				auto it2 = map.find(key);
+				if (it2 == map.end())
+				{
+					auto xs = std::make_shared<TValueVector>();
+					xs->push_back(value);
+					map.insert(std::make_pair(key, xs));
+				}
+				else
+				{
+					it2->second->push_back(value);
+				}
+			}
+
+			auto result = std::make_shared<std::vector<std::pair<TKey, linq<TElement>>>>();
+			for (auto p : map)
+			{
+				result->push_back(std::pair<TKey, linq<TElement>>(p.first, from_values(p.second)));
+			}
+			return from_values(result);
+		}
+
+		template<typename TFunction>
+		linq<TElement> order_by(const TFunction& f)const
+		{
+			typedef typename std::remove_reference<decltype(f(*(TElement*)nullptr))>::type TKey;
+			return group_by(f)
+				.select([](const std::pair<TKey, linq<TElement>>& p) { return p.second; })
+				.aggregate([](const linq<TElement>& a, const linq<TElement>& b) { return a.concat(b); });
+		}
+
+		template<typename TIterator2, typename TFunction1, typename TFunction2, typename TFunction3>
+		auto join(const linq_enumerable<TIterator2>& e,
+			const TFunction1& keySelector1,
+			const TFunction2& keySelector2,
+			const TFunction3& resultSelector)const
+			->linq<decltype(resultSelector(*(TElement*)nullptr, **(TIterator2*)nullptr))>
+		{
+			typedef decltype(resultSelector(*(TElement*)nullptr, **(TIterator2*)nullptr)) TResultValue;
+			auto result = std::make_shared<std::vector<TResultValue>>();
+
+			for (auto it1 = _begin; it1 != _end; ++it1)
+			{
+				auto value1 = *it1;
+				auto key1 = keySelector1(value1);
+				for (auto it2 = e.begin(); it2 != e.end(); ++it2)
+				{
+					auto value2 = *it2;
+					auto key2 = keySelector2(value2);
+					if (key1 != key2) continue;
+
+					result->push_back(resultSelector(value1, value2));
+				}
+			}
+			return from_values(result);
+		}
+
+#pragma endregion 
+
 	};
 	
+
+	template<typename TElement>
+	linq<TElement> from_values(std::shared_ptr<std::vector<TElement>> p)
+	{
+		return linq_enumerable<storage_iterator<TElement>>(
+			storage_iterator<TElement>(p, p->begin()),
+			storage_iterator<TElement>(p, p->end())
+			);
+	}
+
+	template<typename TElement>
+	linq<TElement> from_values(const std::initializer_list<TElement>& ys)
+	{
+		auto xs = std::make_shared<std::vector<TElement>>(ys.begin(), ys.end());
+		return linq_enumerable<storage_iterator<TElement>>(
+			storage_iterator<TElement>(xs, xs->begin()),
+			storage_iterator<TElement>(xs, xs->end())
+			);
+	}
 
 	template<typename TContainer>
 	auto from(const TContainer& c)->linq_enumerable<decltype(std::begin(c))>
 	{
 		return linq_enumerable<decltype(std::begin(c))>(std::begin(c), std::end(c));
 	}
+
+	template<typename T>
+	class linq : public linq_enumerable<hide_type_iterator<T>>
+	{
+	public:
+		linq() {}
+
+		template<typename TIterator>
+		linq(const linq_enumerable<TIterator>& it) : linq_enumerable<hide_type_iterator<T>>(
+			hide_type_iterator<T>(it.begin()),
+			hide_type_iterator<T>(it.end()))
+		{}
+	};
+
 
 
 }
