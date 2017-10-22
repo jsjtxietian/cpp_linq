@@ -1,21 +1,23 @@
 #include "cpplinq.h"
-#include <cassert>
+#include <iostream>
 
+using namespace xt;
+using namespace std;
 
 int main()
 {
-	{
-		vector<int> v = { 1, 2, 3, 4, 5, 6, 7, 8, 9 };
-		auto q = from(v)
-			.where([](int x) {return x%2 == 1; })
-			.select([](int x) {return x*x; });
+	int src[] = { 1,2,3,4,5,6,7,8 };
+	
+	auto query = from(src).where([](int x) {return x % 2 == 1; })
+		.select([](int x) {return x + 1; });
 
-
-		for (auto t : q)
-			cout << t << endl;
-
-	} 
+	for (auto x : query)
+	{	
+		cout << x << endl;
+	}
+	
 
 	system("pause");
 	return 0;
 }
+
