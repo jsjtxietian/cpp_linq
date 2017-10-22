@@ -14,9 +14,6 @@ namespace xt
 	template<typename TIterator>
 	using iterator_type = decltype(**(TIterator*)nullptr);
 
-
-
-
 #pragma region Select&&Where
 	template<typename TIterator, typename TFunction>
 	class where_iterator
@@ -104,6 +101,7 @@ namespace xt
 
 #pragma endregion 
 
+	//todo take
 	template<typename TIterator>
 	class take_iterator
 	{
