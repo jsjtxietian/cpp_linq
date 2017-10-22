@@ -38,7 +38,7 @@ namespace xt
 			}
 		}
 
-		TSelf& operator++()
+		TSelf operator++()
 		{
 			if (iterator == end) return *this;
 			++iterator;
@@ -79,7 +79,7 @@ namespace xt
 			iterator(i), f(_f)
 		{}
 
-		TSelf& operator++()
+		TSelf operator++()
 		{
 			++iterator;
 			return *this;
@@ -104,56 +104,68 @@ namespace xt
 
 #pragma endregion 
 
-	/*template<typename TIterator>
+	template<typename TIterator>
 	class take_iterator
 	{
-		typedef take_iterator<TIterator> Tself;
-
+		typedef take_iterator<TIterator>							TSelf;
 	private:
-		TIterator iterator;
-		TIterator end;
-		int count;
-		int current;
+		TIterator			iterator;
+		TIterator			end;
+		int					count;
+		int					current;
 
 	public:
-		take_iterator(const TIterator& i, const TIterator& e, int c)
-			:iterator(i),end(e),count(c),current(0)
+		take_iterator(const TIterator& _iterator, const TIterator& _end, int _count)
+			:iterator(_iterator), end(_end), count(_count), current(0)
 		{
-			if(current == count)
+			if (current == count)
 			{
 				iterator = end;
 			}
 		}
 
-		Tself& operator++()
+		TSelf& operator++()
 		{
-			if(++current == count)
+			if (++current == count)
 			{
 				iterator = end;
 			}
 			else
 			{
-				++iterator;
+				iterator++;
 			}
 			return *this;
 		}
 
-		iterator_type<TIterator> operator*() const
+		TSelf operator++(int)
+		{
+			TSelf t = *this;
+			if (++current == count)
+			{
+				iterator = end;
+			}
+			else
+			{
+				iterator++;
+			}
+			return t;
+		}
+
+		iterator_type<TIterator> operator*()const
 		{
 			return *iterator;
 		}
 
-		bool operator==(Tself& s) const
+		bool operator==(const TSelf& it)const
 		{
-			return s.iterator == iterator;
+			return iterator == it.iterator;
 		}
 
-		bool operator!=(Tself& s) const
+		bool operator!=(const TSelf& it)const
 		{
-			return s.iterator != iterator;
+			return iterator != it.iterator;
 		}
-
-	};*/
+	};
 
 
 	template<typename  TIterator>
@@ -198,15 +210,15 @@ namespace xt
 			return i;
 		}
 
-		//auto take(int c)const->linq_enumerable<take_iterator<TIterator>>
-		//{
-		//	return linq_enumerable<take_iterator<TIterator>>(
-		//		take_iterator<TIterator>(_begin, _end, c),
-		//		take_iterator<TIterator>(_end, _end, c)
-		//		);
-		//}
 
-		
+		auto take(int c)const->linq_enumerable<take_iterator<TIterator>>
+		{
+			return linq_enumerable<take_iterator<TIterator>>(
+				take_iterator<TIterator>(_begin, _end, c),
+				take_iterator<TIterator>(_end, _end, c)
+				);
+		}
+
 
 	};
 	
